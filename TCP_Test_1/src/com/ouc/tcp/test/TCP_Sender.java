@@ -63,9 +63,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			// System.out.println("CurrentAck: "+currentAck);
 			if (currentAck == tcpPack.getTcpH().getTh_seq()){
 				System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-				flag = 1;
+				flag = 1;// 收到正确ACK，停止等待
 				//break;
 			}else{
+                // 收到旧的 ACK 或非期望 ACK，执行重传
 				System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
 				udt_send(tcpPack);
 				flag = 0;
