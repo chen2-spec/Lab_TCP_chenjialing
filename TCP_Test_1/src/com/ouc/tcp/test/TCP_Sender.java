@@ -38,7 +38,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		
 		//等待ACK报文
 		waitACK();
-		while (flag==0);
+		while (flag==0){
+            try { Thread.sleep(1); } catch (InterruptedException e) {}
+        }
 	}
 	
 	@Override
@@ -76,8 +78,20 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
 		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();	
-	   
+	    System.out.println();
+        // RDT 2.1: 必须先检查 ACK 包的校验和
+        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+            // 校验通过，提取信封里的 ACK 号
+            System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
+            ackQueue.add(recvPack.getTcpH().getTh_ack());
+        } else {
+            // 校验失败（ACK 包坏了）
+            System.out.println("RDT 2.1 Sender: Corrupted ACK received! Treating as NAK.");
+            // 放入 -1，让 waitACK() 方法误以为收到了 NAK，从而触发重传
+            ackQueue.add(-1);
+        }
+
+        System.out.println();
 	    //处理ACK报文
 	    waitACK();
 	   
