@@ -14,8 +14,7 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Receiver extends TCP_Receiver_ADT {
 	
 	private TCP_PACKET ackPack;	//回复的ACK报文段
-    // RDT 2.1: 记录期望收到的序列号，初始为 1
-    private int expectedSeq = 1;
+	int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
 		
 	/*构造函数*/
 	public TCP_Receiver() {
@@ -26,62 +25,41 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	@Override
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
-        // 1. 检查校验和
-        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-            // 校验通过，包是完好的
+		//检查校验码（重新计算数据包的校验和==获取数据包中存储的校验和），生成ACK
+		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+			//生成ACK报文段（设置确认号）
+            //设置ACK号为接收到的数据包序号
+			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+            //创建ACK数据包，目标地址为数据包源地址
+			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            //为ACK包计算校验和
+			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+			//回复ACK报文段
+			reply(ackPack);			
+			
+			//将接收到的正确有序的数据插入data队列，准备交付
+			dataQueue.add(recvPack.getTcpS().getData());				
+			sequence++;
+		}else{//校验和错误，发送NACK
+            //计算出的校验和
+			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
+			//接收的校验和
+            System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
+			//打印出问题的包序号和当前期望序号
+            System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+
+                    " + InnerSeq:  "+sequence);
+			tcpH.setTh_ack(-1);//设置ACK号为-1，表示NACK（否定确认）
+            //创建并发送NACK包
+			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+			//回复ACK报文段
+			reply(ackPack);
+		}
+		System.out.println();
 
-            int currentSeq = recvPack.getTcpH().getTh_seq();
-
-            // 2. 检查序号：是新包还是重复包？
-            if (currentSeq == expectedSeq) {
-                // --- 情况 A: 是我想要的新包 ---
-
-                // 交付数据
-                dataQueue.add(recvPack.getTcpS().getData());
-                // 更新期望序号 (当前序号 + 数据长度)
-                // 注意：你的实验中 appData 固定 100 个 int，虽然是 int 但这里模拟字节流步长
-                // 根据日志，步长是 100 (1 -> 101 -> 201)
-                // 计算当前包的数据长度（以防止变长）
-                int dataLen = recvPack.getTcpS().getData().length;
-                if (dataLen == 0) dataLen = 1; // 防止空包死循环，但在本实验中通常是 100
-                expectedSeq += dataLen; // 移动窗口，准备收下一个
-
-                System.out.println("RDT 2.1 Receiver: Accepted new packet seq " + currentSeq);
-
-                // 累积写入文件
-                if (dataQueue.size() >= 20) deliver_data();
-
-            } else {
-                // --- 情况 B: 是重复包 (Duplicate) ---
-                // 说明刚才我发的 ACK 丢了或坏了，Sender 又发了一遍
-                System.out.println("RDT 2.1 Receiver: Detected Duplicate packet seq " + currentSeq + ", expected " + expectedSeq);
-                // 动作：丢弃数据（不 add 到 dataQueue），但必须重发 ACK
-            }
-
-            // 3. 无论新包还是旧包，只要校验通过，都要回复 ACK
-            // 注意：ACK 的确认号应该是“我收到的这个包的序号” (或者 expectedSeq，取决于协议细节，这里建议回 currentSeq 以确认收到)
-            tcpH.setTh_ack(currentSeq);
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            reply(ackPack);
-
-        } else {
-            // --- 情况 C: 包坏了 (校验失败) ---
-            System.out.println("RDT 2.1 Receiver: Checksum Error! Sending NAK.");
-
-            tcpH.setTh_ack(-1); // NAK
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            reply(ackPack);
-        }
-
-        System.out.println();
-
-
-		
 		//交付数据（每20组数据交付一次）
-		if(dataQueue.size() == 20)
-		deliver_data();
+		if(dataQueue.size() == 20) 
+			deliver_data();	
 	}
 
 	@Override
@@ -116,9 +94,9 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)0);	//eFlag=0，信道无错误
-				
-		//发送数据报
+		tcpH.setTh_eflag((byte)1);	//eFlag=1，信道只出错
+
+        //发送数据报
 		client.send(replyPack);
 	}
 	

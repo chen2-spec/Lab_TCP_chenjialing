@@ -12,12 +12,12 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Sender extends TCP_Sender_ADT {
 	
 	private TCP_PACKET tcpPack;	//待发送的TCP数据报
-	private volatile int flag = 0;
+	private volatile int flag = 0; //标志位：0=等待ACK，1=收到正确ACK
 	
 	/*构造函数*/
 	public TCP_Sender() {
 		super();	//调用超类构造函数
-		super.initTCP_Sender(this);		//初始化TCP发送端
+		super.initTCP_Sender(this);//初始化TCP发送端
 	}
 	
 	@Override
@@ -25,22 +25,22 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void rdt_send(int dataIndex, int[] appData) {
 		
 		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
+        //计算序列号：数据索引 × 数据长度 + 1
 		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
 		tcpS.setData(appData);
+        //使用TCP首部、数据段、目标地址创建完整数据包
 		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);		
 		//更新带有checksum的TCP 报文头		
 		tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
+        //更新数据报中的首部对象
 		tcpPack.setTcpH(tcpH);
-		
 		//发送TCP数据报
 		udt_send(tcpPack);
 		flag = 0;// 重置标志位，准备进入等待
 		
 		//等待ACK报文
-		waitACK();
-		while (flag==0){
-            try { Thread.sleep(1); } catch (InterruptedException e) {}
-        }
+		//waitACK();
+		while (flag==0);//忙等待，等待则设置为1
 	}
 	
 	@Override
@@ -60,15 +60,16 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		//循环检查确认号对列中是否有新收到的ACK		
 		if(!ackQueue.isEmpty()){
 			int currentAck=ackQueue.poll();
+            //收到的ACK号等于发送包的序号则确认成功
 			// System.out.println("CurrentAck: "+currentAck);
 			if (currentAck == tcpPack.getTcpH().getTh_seq()){
 				System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-				flag = 1;
+				flag = 1;//设置flag=1，退出等待循环
 				//break;
-			}else{
+			}else{//重传当前数据包
 				System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
 				udt_send(tcpPack);
-				flag = 0;
+				flag = 0;//依然是waitACK状态
 			}
 		}
 	}
@@ -78,20 +79,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
 		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();
-        // RDT 2.1: 必须先检查 ACK 包的校验和
-        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-            // 校验通过，提取信封里的 ACK 号
-            System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
-            ackQueue.add(recvPack.getTcpH().getTh_ack());
-        } else {
-            // 校验失败（ACK 包坏了）
-            System.out.println("RDT 2.1 Sender: Corrupted ACK received! Treating as NAK.");
-            // 放入 -1，让 waitACK() 方法误以为收到了 NAK，从而触发重传
-            ackQueue.add(-1);
-        }
-
-        System.out.println();
+	    System.out.println();	
+	   
 	    //处理ACK报文
 	    waitACK();
 	   
