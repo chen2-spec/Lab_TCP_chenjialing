@@ -77,9 +77,22 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	@Override
 	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改
 	public void recv(TCP_PACKET recvPack) {
-		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
-		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();	
+        // RDT 2.1 ：必须先检查校验和（在RDT2.0的基础上能够检测校验和是否出错）
+        //CheckSum.computeChkSum() 计算接收包的校验和
+        // recvPack.getTcpH().getTh_sum() 获取包中存储的校验和
+        //判断接受包校验和与存储的校验和是否相等
+        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+        //校验和正确，相等表示包在传输过程中未损坏，显示接收到的确认号
+            System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
+            ackQueue.add(recvPack.getTcpH().getTh_ack());
+        } else {
+        //校验和错误：ACK/NACK 包在传输中损坏，输出警告信息，提示收到了损坏的 ACK
+            System.out.println("RDT 2.1 Sender: Corrupted ACK received! Treating as NAK.");
+        //将损坏的 ACK 当作 NACK处理，添加 -1 到确认队列，表示需要重传
+            ackQueue.add(-1);
+        }
+
+
 	   
 	    //处理ACK报文
 	    waitACK();
