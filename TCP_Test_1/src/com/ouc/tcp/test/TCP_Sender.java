@@ -91,8 +91,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         //将损坏的 ACK 当作 NACK处理，添加 -1 到确认队列，表示需要重传
             ackQueue.add(-1);
         }
-
-
 	   
 	    //处理ACK报文
 	    waitACK();
