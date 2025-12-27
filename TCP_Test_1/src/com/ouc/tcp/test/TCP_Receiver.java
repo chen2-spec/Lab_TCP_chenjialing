@@ -25,11 +25,14 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	@Override
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
-		//检查校验码，生成ACK
+		//检查校验码（重新计算数据包的校验和==获取数据包中存储的校验和），生成ACK
 		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
 			//生成ACK报文段（设置确认号）
+            //设置ACK号为接收到的数据包序号
 			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+            //创建ACK数据包，目标地址为数据包源地址
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            //为ACK包计算校验和
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段
 			reply(ackPack);			
@@ -37,20 +40,23 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			//将接收到的正确有序的数据插入data队列，准备交付
 			dataQueue.add(recvPack.getTcpS().getData());				
 			sequence++;
-		}else{
+		}else{//校验和错误，发送NACK
+            //计算出的校验和
 			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
-			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-			tcpH.setTh_ack(-1);
+			//接收的校验和
+            System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
+			//打印出问题的包序号和当前期望序号
+            System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+
+                    " + InnerSeq:  "+sequence);
+			tcpH.setTh_ack(-1);//设置ACK号为-1，表示NACK（否定确认）
+            //创建并发送NACK包
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段
 			reply(ackPack);
 		}
-		
 		System.out.println();
-		
-		
+
 		//交付数据（每20组数据交付一次）
 		if(dataQueue.size() == 20) 
 			deliver_data();	
@@ -88,9 +94,9 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)0);	//eFlag=0，信道无错误
-				
-		//发送数据报
+		tcpH.setTh_eflag((byte)1);	//eFlag=1，信道只出错
+
+        //发送数据报
 		client.send(replyPack);
 	}
 	

@@ -11,20 +11,24 @@ public class CheckSum {
     public static short computeChkSum(TCP_PACKET tcpPack) {
         // 使用 CRC32 算法进行校验
         CRC32 crc = new CRC32();
-
         // 1. 校验首部关键字段
+        //检验序列号字段
+        // tcpPack.getTcpH()：获取TCP首部对象
+        //.getTh_seq()：获取32位的序列号字段
+        //crc.update()：将序列号值加入CRC计算
         crc.update(tcpPack.getTcpH().getTh_seq());
+        //检验确认号字段
+         //.getTh_ack()：获取32位的确认号字段
         crc.update(tcpPack.getTcpH().getTh_ack());
-
-        // 2. 校验数据部分
-        // 注意：Data是int[]，需要遍历加入校验
+        // 2. 校验数据部分，注意：Data是int[]，需要遍历加入校验
+        //首先获取数据部分
         int[] data = tcpPack.getTcpS().getData();
+        //遍历并校验数据数组
         if (data != null) {
             for (int i = 0; i < data.length; i++) {
                 crc.update(data[i]);
             }
         }
-
         // 3. 返回校验值 (强制转换为short)
         return (short) crc.getValue();
     }
