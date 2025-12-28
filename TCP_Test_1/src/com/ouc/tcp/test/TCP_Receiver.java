@@ -32,7 +32,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             int currentSeq = recvPack.getTcpH().getTh_seq();
             // 2. 检查序号是不是想要的
             if (currentSeq == expectedSeq) { // 是想要的
-                System.out.println("RDT 2.2 Receiver: Accepted packet " + currentSeq);
+                System.out.println("RDT 3.0 Receiver: Accepted packet " + currentSeq);
                 // 交付数据
                 dataQueue.add(recvPack.getTcpS().getData());
                 // 发送当前包的 ACK
@@ -43,33 +43,20 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 // 移动窗口，期待下一个包
                 expectedSeq += 100;
                 //交付数据
-                //if(dataQueue.size() >= 20) deliver_data();
+                if(dataQueue.size() >= 20) deliver_data();
 
-            } else {
-                // 收到重复包，不是想要的序号
-                // 丢弃数据，重发上一个成功的 ACK
-                System.out.println("RDT 2.2 Receiver: Duplicate/Wrong Seq " + currentSeq + ". Expected " + expectedSeq);
-                // 上一个成功序号 = 期望序号 - 步长
-                int lastAck = expectedSeq - 100;
-                // 如果是第一个包就出错，用 -1 代表“起始前”状态
-                if (lastAck < 1) lastAck = -1;
-                // 发送冗余 ACK (Duplicate ACK)
-                tcpH.setTh_ack(lastAck);
+            } else {// 收到重复包，不是想要的序号
+                System.out.println("RDT 3.0 Receiver: Duplicate packet " + currentSeq + ". Resending ACK.");
+                // 触发 Sender 的 Clear 逻辑
+                tcpH.setTh_ack(currentSeq);
                 ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
                 tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
                 reply(ackPack);
             }
         } else { //校验和出错 (包损坏) ---
-            // RDT 2.2 ：不再发送 -1，而是发送上一个成功的确认号
-            System.out.println("RDT 2.2 Receiver: Corrupted Packet. Sending Duplicate ACK.");
-            // 不发 NAK，而是发送带有“上一个正确序号”的 ACK
-            int lastAck = expectedSeq - 100;
-            if (lastAck < 1) lastAck = -1;
 
-            tcpH.setTh_ack(lastAck);
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            reply(ackPack);
+            System.out.println("RDT 3.0 Receiver: Corrupted packet. Ignored.");
+
         }
 
 		//交付数据（每20组数据交付一次）
@@ -109,7 +96,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)1);
+		tcpH.setTh_eflag((byte)4);
 				
 		//发送数据报
 		client.send(replyPack);
