@@ -44,7 +44,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             //计算出的校验和
 			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 			//接收的校验和
-            System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
+            System.out.println("Recieved Packet:"+recvPack.getTcpH().getTh_sum());
 			//打印出问题的包序号和当前期望序号
             System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+
                     " + InnerSeq:  "+sequence);
