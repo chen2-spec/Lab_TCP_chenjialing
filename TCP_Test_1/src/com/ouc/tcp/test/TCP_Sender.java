@@ -37,10 +37,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		flag = 0;// 重置标志位，准备进入等待
 		
 		//等待ACK报文
-		waitACK();
-		while (flag==0){
-            try { Thread.sleep(1); } catch (InterruptedException e) {}
-        }
+		//waitACK();
+		while (flag==0);
 	}
 	
 	@Override
@@ -66,8 +64,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
 				flag = 1;// 收到正确ACK，停止等待
 				//break;
 			}else{
-                // 收到旧的 ACK 或非期望 ACK，执行重传
-				System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+                // 若收到冗余 ACK (如发101收到ACK 1) 则说明接收方没收到101
+                // 若收到损坏 ACK (被 recv 标记为 -2)则必须重传
+                System.out.println("RDT 2.2 Sender: Duplicate/Corrupt ACK received. Retransmit: " + tcpPack.getTcpH().getTh_seq());
 				udt_send(tcpPack);
 				flag = 0;
 			}
@@ -77,19 +76,17 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	@Override
 	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改
 	public void recv(TCP_PACKET recvPack) {
-		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
-		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();
-        // RDT 2.1: 必须先检查 ACK 包的校验和
+        // 1. 检查 ACK 包是否损坏（校验和）
         if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-            // 校验通过，提取信封里的 ACK 号
-            System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
+            // 完好，提取确认号
+            System.out.println("Receive ACK Number: " + recvPack.getTcpH().getTh_ack());
             ackQueue.add(recvPack.getTcpH().getTh_ack());
         } else {
-            // 校验失败（ACK 包坏了）
-            System.out.println("RDT 2.1 Sender: Corrupted ACK received! Treating as NAK.");
-            // 放入 -1，让 waitACK() 方法误以为收到了 NAK，从而触发重传
-            ackQueue.add(-1);
+            // 损坏：ACK 坏了，发送方无法确认接收方状态
+            // 在 RDT 2.2 中，ACK 坏了等同于没收到正确 ACK，触发重传
+            // 这里的 -2 是一个自定义的“错误标记”
+            System.out.println("RDT 2.2 Sender: Corrupted ACK. Triggering retransmission.");
+            ackQueue.add(-2);
         }
 
         System.out.println();

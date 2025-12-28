@@ -29,40 +29,48 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         // 1. 检查校验和
         if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
             // 校验通过，包是完好的
-
             int currentSeq = recvPack.getTcpH().getTh_seq();
-
             // 2. 检查序号是不是想要的
-            if (currentSeq == expectedSeq) {
-                // --- 情况 A: 是想要的---
+            if (currentSeq == expectedSeq) { // 是想要的
+                System.out.println("RDT 2.2 Receiver: Accepted packet " + currentSeq);
                 // 交付数据
                 dataQueue.add(recvPack.getTcpS().getData());
-                // 更新期望序号 (当前序号 + 数据长度)
-                // 计算当前包的数据长度（以防止变长）
-                int dataLen = recvPack.getTcpS().getData().length;
-                if (dataLen == 0) dataLen = 1;
-                expectedSeq += dataLen; // 移动窗口，准备收下一个
-                // 交付数据
-                if (dataQueue.size() >= 20) deliver_data();
-                // 回复当前的 ACK
-                tcpH.setTh_ack(currentSeq); // 确认当前包
+                // 发送当前包的 ACK
+                tcpH.setTh_ack(currentSeq);
+                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack)); // 给 ACK 加校验和
+                reply(ackPack);
+                // 移动窗口，期待下一个包
+                expectedSeq += 100;
+                //交付数据
+                //if(dataQueue.size() >= 20) deliver_data();
+
             } else {
-                // --- 情况 B: 收到重复包，不是想要的序号 ---
-                // RDT 2.2 回复上一个成功接收的序号
+                // 收到重复包，不是想要的序号
+                // 丢弃数据，重发上一个成功的 ACK
+                System.out.println("RDT 2.2 Receiver: Duplicate/Wrong Seq " + currentSeq + ". Expected " + expectedSeq);
                 // 上一个成功序号 = 期望序号 - 步长
-                tcpH.setTh_ack(expectedSeq - 100);
+                int lastAck = expectedSeq - 100;
+                // 如果是第一个包就出错，用 -1 代表“起始前”状态
+                if (lastAck < 1) lastAck = -1;
+                // 发送冗余 ACK (Duplicate ACK)
+                tcpH.setTh_ack(lastAck);
+                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+                reply(ackPack);
             }
-        } else {
-            // --- 情况 C: 校验和出错 (包损坏) ---
+        } else { //校验和出错 (包损坏) ---
             // RDT 2.2 ：不再发送 -1，而是发送上一个成功的确认号
-            System.out.println("RDT 2.2 Receiver: Checksum Error! Sending Duplicate ACK.");
-            tcpH.setTh_ack(expectedSeq - 100); // 告诉发送方我还在等 expectedSeq
+            System.out.println("RDT 2.2 Receiver: Corrupted Packet. Sending Duplicate ACK.");
+            // 不发 NAK，而是发送带有“上一个正确序号”的 ACK
+            int lastAck = expectedSeq - 100;
+            if (lastAck < 1) lastAck = -1;
+
+            tcpH.setTh_ack(lastAck);
+            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+            reply(ackPack);
         }
-        // 构建回复包并发送
-        ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-        tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-        reply(ackPack);
-        System.out.println();
 
 		//交付数据（每20组数据交付一次）
 		if(dataQueue.size() == 20)
