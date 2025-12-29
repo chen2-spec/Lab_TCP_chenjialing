@@ -15,7 +15,7 @@ public class SenderSlidingWindow {
     private Timer timer;  // 计时器
     private TaskPacketsRetransmit task;  // 重传任务
 
-   /*构造函数*/
+    /*构造函数*/
     public SenderSlidingWindow(Client client) {
         this.client = client;
     }
