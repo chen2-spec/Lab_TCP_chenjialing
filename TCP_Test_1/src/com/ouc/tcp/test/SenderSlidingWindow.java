@@ -1,6 +1,8 @@
 package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.Client;
+import com.ouc.tcp.client.UDT_RetransTask;
+import com.ouc.tcp.client.UDT_Timer;
 import com.ouc.tcp.message.TCP_PACKET;
 
 import java.util.Timer;
@@ -11,9 +13,9 @@ public class SenderSlidingWindow {
     private int base = 0;  // 窗口左值
     private int nextIndex = 0;  // 下一个包的存放位置
     private TCP_PACKET[] packets = new TCP_PACKET[size];  // 存储窗口内的包
+    private UDT_Timer[] timers = new UDT_Timer[size];  // 存储计时器
 
-    private Timer timer;  // 计时器
-    private TaskPacketsRetransmit task;  // 重传任务
+
 
     /*构造函数*/
     public SenderSlidingWindow(Client client) {
@@ -28,39 +30,41 @@ public class SenderSlidingWindow {
     /*向窗口中加入包*/
     public void putPacket(TCP_PACKET packet) {
         packets[nextIndex] = packet;  // 在窗口的插入位置放入包
-        if (nextIndex == 0) {  // 如果在窗口左沿，则要开启计时器
-            timer = new Timer();
-            task = new TaskPacketsRetransmit(client, packets);
-            timer.schedule(task, 1000, 1000);
-        }
-
+        timers[nextIndex] = new UDT_Timer();  // 为新放入窗口内的包增加计时器
+        timers[nextIndex].schedule(new UDT_RetransTask(client, packet), 1000, 1000);
         nextIndex++;  // 更新窗口的插入位置
     }
 
     /*接收到ACK*/
     public void receiveACK(int currentSequence) {
-        if (base <= currentSequence && currentSequence < base + size) {  // 如果收到的ACK在窗口范围内
-            // 计算确认的包在窗口中的相对位置：currentSequence - base
-            // 将已确认包之后的所有包向前移动（相当于删除已确认的包）
-            for (int i = 0; currentSequence - base + 1 + i < size; i++) {  // 将窗口中位于确认的包之后的包整体移动到窗口左沿
-                // 将后续包移动到窗口起始位置
-                packets[i] = packets[currentSequence - base + 1 + i];
-                // 清空原来的位置
-                packets[currentSequence - base + 1 + i] = null;
-            }
-            // 更新nextIndex：减去已确认的包数量
-            nextIndex -=currentSequence - base + 1;  // 更新nextIndex
-            // 更新基序号：移动到下一个未确认的位置
-            base = currentSequence + 1;  // 更新窗口左沿指示的seq
-
-            timer.cancel();  // 停止计时器
-
-            if (nextIndex != 0) {  // 窗口中仍有包，则重开计时器
-                timer = new Timer();
-                task = new TaskPacketsRetransmit(client, packets);
-                timer.schedule(task, 1000, 1000);
+        if (base <= currentSequence && currentSequence < base + size) {  // 接收到的包的序号位于窗口内
+            if (timers[currentSequence - base] == null) {  // 表示接收到重复ACK，什么也不做
+                return;
             }
 
+            timers[currentSequence - base].cancel();  // 终止计时器
+            timers[currentSequence - base] = null;  // 删除计时器
+
+            if (currentSequence == base) {  // 接收到的ACK位于窗口左沿，则要移动窗口
+                int leftMoveIndex = 0;  // 窗口左沿应该移动到的位置：最小未ACK的分组
+                while (leftMoveIndex + 1 <= nextIndex && timers[leftMoveIndex] == null) {
+                    leftMoveIndex ++;
+                }
+
+
+                for (int i = 0; leftMoveIndex + i < size; i++) {  // 将窗口内的包左移
+                    packets[i] = packets[leftMoveIndex + i];
+                    timers[i] = timers[leftMoveIndex + i];
+                }
+
+                for (int i = size - (leftMoveIndex); i < size; i++) {  // 清空已左移的包原来所在位置处的包和计时器
+                    packets[i] = null;
+                    timers[i] = null;
+                }
+
+                base += leftMoveIndex;  // 移动窗口左沿至leftMoveIndex处
+                nextIndex -= leftMoveIndex;  // 移动下一个插入包的位置
+            }
         }
     }
 }

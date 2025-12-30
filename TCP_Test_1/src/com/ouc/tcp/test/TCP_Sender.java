@@ -33,24 +33,26 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpPack.setTcpH(tcpH);
 
         // 判断发送窗口是否已满
-        if (this.window.isFull()) {
+        if (window.isFull()) {
             System.out.println();
             System.out.println("Sliding Window is full");
             System.out.println();
-            this.flag = 0;
+            flag = 0;
         }
 
         //等待ACK报文
         while (flag==0);
 
         try {
-            this.window.putPacket(this.tcpPack.clone());
+            window.putPacket(tcpPack.clone());
         } catch (CloneNotSupportedException e) {
             e.printStackTrace();
         }
 
         // 发送 TCP 数据报
-        udt_send(this.tcpPack);
+        udt_send(tcpPack);
+
+
 
     }
 

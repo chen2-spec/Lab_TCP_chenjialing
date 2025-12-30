@@ -12,9 +12,11 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Receiver extends TCP_Receiver_ADT {
 
     private TCP_PACKET ackPack;	//回复的ACK报文段
-    //private int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
-    //private int last_sequence = -1; // 用于记录上一次收到包的序号
+    private int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
+    private int last_sequence = -1; // 用于记录上一次收到包的序号
     private int expectedSequence = 0;  // 用于记录期望收到的seq
+
+    private ReceiverSlidingWindow window = new ReceiverSlidingWindow(this.client);
 
     /*构造函数*/
     public TCP_Receiver() {
@@ -25,72 +27,33 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     @Override
     //接收到数据报：检查校验和，设置回复的ACK报文段
     public void rdt_recv(TCP_PACKET recvPack) {
-        //检查校验码，生成ACK
-        if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {  // 计算并比对校验和，如果相等：
-            int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;  // 当前包的seq
-            if (expectedSequence == currentSequence) {  // 当前收到的包就是期望的包
+        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {  // 计算并比对校验和，如果相等：
+            int ackSequence = -1;
+            try {
+                ackSequence = this.window.receivePacket(recvPack.clone());
+            } catch (CloneNotSupportedException e) {
+                e.printStackTrace();
+            }
+
+            if (ackSequence != -1) {
                 //生成ACK报文段（设置确认号）
-                tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());  // 设置确认号为收到的TCP分组的seq
-                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());  // 新建一个TCP分组（ACK），发往发送方
-                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));  // 设置ACK的校验位
-
-                reply(ackPack);  // 回复ACK报文段
-
-                // 将接收到的正确有序的数据插入 data 队列，准备交付
-                dataQueue.add(recvPack.getTcpS().getData());
-
-                expectedSequence += 1;  // 更新期望收到的包的seq
-
-            } else {  // 收到失序的包，返回已确认的最大序号分组的确认
-                //生成ACK报文段（设置确认号）
-                tcpH.setTh_ack((expectedSequence - 1) * 100 + 1);  // 设置确认号为已确认的最大序号
+                tcpH.setTh_ack(ackSequence * 100 + 1);  // 设置确认号为收到的TCP分组的seq
                 ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());  // 新建一个TCP分组（ACK），发往发送方
                 tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));  // 设置ACK的校验位
 
                 reply(ackPack);  // 回复ACK报文段
             }
         }
-
-
-        System.out.println();
-
-
-        //交付数据（每20组数据交付一次）
-        if(dataQueue.size() == 20)
-            deliver_data();
     }
 
     @Override
     //交付数据（将数据写入文件）；不需要修改
-    public void deliver_data() {
-        //检查dataQueue，将数据写入文件
-        File fw = new File("recvData.txt");
-        BufferedWriter writer;
-
-        try {
-            writer = new BufferedWriter(new FileWriter(fw, true));
-
-            //循环检查data队列中是否有新交付数据
-            while(!dataQueue.isEmpty()) {
-                int[] data = dataQueue.poll();
-
-                //将数据写入文件
-                for(int i = 0; i < data.length; i++) {
-                    writer.write(data[i] + "\n");
-                }
-
-                writer.flush();		//清空输出缓存
-            }
-            writer.close();
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-    }
+    public void deliver_data() { }
 
     @Override
     //回复ACK报文段
     public void reply(TCP_PACKET replyPack) {
+
         tcpH.setTh_eflag((byte)3);
 
         //发送数据报
