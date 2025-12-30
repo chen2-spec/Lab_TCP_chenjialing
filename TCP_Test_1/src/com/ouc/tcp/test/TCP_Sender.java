@@ -1,6 +1,3 @@
-/***************************2.1: ACK/NACK
- **************************** Feng Hong; 2015-12-09*/
-
 package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.TCP_Sender_ADT;
@@ -60,16 +57,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
     @Override
     //不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
     public void udt_send(TCP_PACKET stcpPack) {
-        //设置错误控制标志
-        // 设置错误控制标志
-        // 0: 信道无差错
-        // 1: 只出错
-        // 2: 只丢包
-        // 3: 只延迟
-        // 4: 出错 / 丢包
-        // 5: 出错 / 延迟
-        // 6: 丢包 / 延迟
-        // 7: 出错 / 丢包 / 延迟
         tcpH.setTh_eflag((byte)3);
         //System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
         //发送数据报
@@ -78,7 +65,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
     @Override
     //需要修改
-    public void waitACK() {	}
+    public void waitACK() {
+
+    }
 
     @Override
     //接收到ACK报文：

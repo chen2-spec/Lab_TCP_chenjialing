@@ -40,12 +40,17 @@ public class SenderSlidingWindow {
     /*接收到ACK*/
     public void receiveACK(int currentSequence) {
         if (base <= currentSequence && currentSequence < base + size) {  // 如果收到的ACK在窗口范围内
+            // 计算确认的包在窗口中的相对位置：currentSequence - base
+            // 将已确认包之后的所有包向前移动（相当于删除已确认的包）
             for (int i = 0; currentSequence - base + 1 + i < size; i++) {  // 将窗口中位于确认的包之后的包整体移动到窗口左沿
+                // 将后续包移动到窗口起始位置
                 packets[i] = packets[currentSequence - base + 1 + i];
+                // 清空原来的位置
                 packets[currentSequence - base + 1 + i] = null;
             }
-
+            // 更新nextIndex：减去已确认的包数量
             nextIndex -=currentSequence - base + 1;  // 更新nextIndex
+            // 更新基序号：移动到下一个未确认的位置
             base = currentSequence + 1;  // 更新窗口左沿指示的seq
 
             timer.cancel();  // 停止计时器

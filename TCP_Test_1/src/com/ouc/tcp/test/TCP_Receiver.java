@@ -1,5 +1,3 @@
-/***************************2.1: ACK/NACK*****************/
-/***** Feng Hong; 2015-12-09******************************/
 package com.ouc.tcp.test;
 
 import java.io.BufferedWriter;
@@ -14,8 +12,8 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Receiver extends TCP_Receiver_ADT {
 
     private TCP_PACKET ackPack;	//回复的ACK报文段
-    private int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
-    private int last_sequence = -1; // 用于记录上一次收到包的序号
+    //private int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
+    //private int last_sequence = -1; // 用于记录上一次收到包的序号
     private int expectedSequence = 0;  // 用于记录期望收到的seq
 
     /*构造函数*/
@@ -93,15 +91,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     @Override
     //回复ACK报文段
     public void reply(TCP_PACKET replyPack) {
-        // 设置错误控制标志
-        // 0: 信道无差错
-        // 1: 只出错
-        // 2: 只丢包
-        // 3: 只延迟
-        // 4: 出错 / 丢包
-        // 5: 出错 / 延迟
-        // 6: 丢包 / 延迟
-        // 7: 出错 / 丢包 / 延迟
         tcpH.setTh_eflag((byte)3);
 
         //发送数据报
