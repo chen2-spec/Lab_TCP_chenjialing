@@ -33,7 +33,6 @@ public class SenderSlidingWindow {
             task = new TaskPacketsRetransmit(client, packets);
             timer.schedule(task, 1000, 1000);
         }
-
         nextIndex++;  // 更新窗口的插入位置
     }
 

@@ -20,7 +20,6 @@ public class TaskPacketsRetransmit extends TimerTask {
 
     @Override
     public void run() {//计时器到期时自动调用
-
         for (int i = 0; i < packets.length; i ++ )
         {
             if (packets[i] == null) {  // 如果没有包则跳出循环

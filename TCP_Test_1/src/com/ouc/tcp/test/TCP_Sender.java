@@ -37,12 +37,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
             System.out.println();
             System.out.println("Sliding Window is full");
             System.out.println();
-            this.flag = 0;
+            this.flag = 0;// 设置标志阻止进一步发送
         }
 
         //等待ACK报文
-        while (flag==0);
-
+        while (flag==0);// 忙等待，直到窗口有空闲位置
         try {
             this.window.putPacket(this.tcpPack.clone());
         } catch (CloneNotSupportedException e) {
@@ -57,7 +56,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
     @Override
     //不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
     public void udt_send(TCP_PACKET stcpPack) {
-        tcpH.setTh_eflag((byte)4);
+        tcpH.setTh_eflag((byte)7);
         //System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
         //发送数据报
         client.send(stcpPack);

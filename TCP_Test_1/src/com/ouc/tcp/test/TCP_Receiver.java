@@ -26,7 +26,8 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     //接收到数据报：检查校验和，设置回复的ACK报文段
     public void rdt_recv(TCP_PACKET recvPack) {
         //检查校验码，生成ACK
-        if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {  // 计算并比对校验和，如果相等：
+        if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+            // 计算并比对校验和，如果相等：
             int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;  // 当前包的seq
             if (expectedSequence == currentSequence) {  // 当前收到的包就是期望的包
                 //生成ACK报文段（设置确认号）
@@ -91,7 +92,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     @Override
     //回复ACK报文段
     public void reply(TCP_PACKET replyPack) {
-        tcpH.setTh_eflag((byte)4);
+        tcpH.setTh_eflag((byte)7);
 
         //发送数据报
         client.send(replyPack);
