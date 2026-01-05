@@ -91,7 +91,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     @Override
     //回复ACK报文段
     public void reply(TCP_PACKET replyPack) {
-        tcpH.setTh_eflag((byte)3);
+        tcpH.setTh_eflag((byte)4);
 
         //发送数据报
         client.send(replyPack);
