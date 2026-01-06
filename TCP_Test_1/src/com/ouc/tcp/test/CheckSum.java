@@ -14,7 +14,7 @@ public class CheckSum {
         // 1. 校验首部关键字段
         //检验序列号字段
         // tcpPack.getTcpH()：获取TCP首部对象
-        //.getTh_seq()：获取32位的序列号字段
+        // getTh_seq()：获取32位的序列号字段
         //crc.update()：将序列号值加入CRC计算
         crc.update(tcpPack.getTcpH().getTh_seq());
         //检验确认号字段
