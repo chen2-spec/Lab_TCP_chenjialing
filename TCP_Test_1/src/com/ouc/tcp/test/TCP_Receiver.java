@@ -87,7 +87,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			}
 			writer.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+
 			e.printStackTrace();
 		}
 	}
@@ -96,7 +96,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)4);
+		tcpH.setTh_eflag((byte)2);
 				
 		//发送数据报
 		client.send(replyPack);
