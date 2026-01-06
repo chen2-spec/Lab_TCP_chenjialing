@@ -37,8 +37,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		flag = 0;// 重置标志位，准备进入等待
 		
 		//等待ACK报文
-		//waitACK();
-		while (flag==0);
+		waitACK();
+		//while (flag==0);
 	}
 	
 	@Override
