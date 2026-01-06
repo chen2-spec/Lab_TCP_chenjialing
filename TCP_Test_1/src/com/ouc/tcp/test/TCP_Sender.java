@@ -1,3 +1,6 @@
+/***************************2.1: ACK/NACK
+ **************************** Feng Hong; 2015-12-09*/
+
 package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.TCP_Sender_ADT;
@@ -9,11 +12,9 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Sender extends TCP_Sender_ADT {
 
     private TCP_PACKET tcpPack;	//待发送的TCP数据报
-    private volatile int flag = 1;
-
+    private volatile int flag = 1;// 同步标志，volatile确保多线程可见性
+    // 发送方滑动窗口对象，管理发送窗口状态
     private SenderSlidingWindow window = new SenderSlidingWindow(this.client);
-
-
     /*构造函数*/
     public TCP_Sender() {
         super();	//调用超类构造函数
@@ -52,24 +53,20 @@ public class TCP_Sender extends TCP_Sender_ADT {
         // 发送 TCP 数据报
         udt_send(tcpPack);
 
-
-
     }
 
     @Override
     //不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
     public void udt_send(TCP_PACKET stcpPack) {
-        tcpH.setTh_eflag((byte)3);
-        //System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
+
+        tcpH.setTh_eflag((byte)7);
         //发送数据报
         client.send(stcpPack);
     }
 
     @Override
     //需要修改
-    public void waitACK() {
-
-    }
+    public void waitACK() {	}
 
     @Override
     //接收到ACK报文：
