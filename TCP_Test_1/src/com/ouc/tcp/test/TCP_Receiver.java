@@ -84,7 +84,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             }
             writer.close();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
+
             e.printStackTrace();
         }
     }
