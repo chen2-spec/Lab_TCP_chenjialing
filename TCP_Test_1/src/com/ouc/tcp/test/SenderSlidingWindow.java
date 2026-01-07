@@ -37,6 +37,7 @@ public class SenderSlidingWindow {
     private int lastCwnd = 1;  // 用于记录上一次的cwnd
     private int lastSsthresh = 16;  // y用于记录上一次的ssthresh
 
+
     public int getSsthresh() {return ssthresh;}
 
     public void setSsthresh(int ssthresh) {this.ssthresh = ssthresh;}
@@ -66,6 +67,8 @@ public class SenderSlidingWindow {
     public void putPacket(TCP_PACKET packet) {
         // 计算当前包的简化序号（例如把 101, 201 变成 1, 2）
         int currentSequence = ((packet.getTcpH().getTh_seq() - 1) / 100);
+        // 计算这个 ACK 到底确认了几个包（累计确认数量）
+        int ackedCount = currentSequence - lastACKSequence;
         // 计时器逻辑：如果窗口是空的，说明这是当前窗口的第一个包，启动计时器
         // TCP一般只对窗口最左沿（Base）的包计时
         if (packets.isEmpty()) {
@@ -98,102 +101,92 @@ public class SenderSlidingWindow {
     }
 
     /*接收到ACK*/
+    /*接收到ACK*/
     public void receiveACK(int currentSequence) {
         // 收到重复ACK（快重传/快恢复）
         if (currentSequence == lastACKSequence) {
             lastACKSequenceCount++;
-            if (lastACKSequenceCount == 4) {  // 三个重复ACK，执行快重传
+            if (lastACKSequenceCount == 4) {  // 三个重复ACK
+                // ... (快重传逻辑保持不变) ...
                 if (packets.containsKey(currentSequence + 1)) {
-                    // 快重传
                     System.out.println("***** Fast Retransmit *****");
                     TCP_PACKET packet = packets.get(currentSequence + 1);
                     client.send(packet);
-                    // 重置计时器
                     timer.cancel();
                     timer = new Timer();
                     timer.schedule(new RetransmitTask(client, this), 1000, 1000);
                 }
 
-                // 快恢复
+                // ... (快恢复逻辑保持不变) ...
                 if (RENO_FLAG == 1) {
-                    /*TCP Reno版本*/
                     System.out.println("***** Fast Recovery *****");
-                    // 乘法减小：门限 ssthresh 降为当前窗口的一半
                     if (cwnd / 2 < 2) {
-                        System.out.println("ssthresh: " + ssthresh + " ---> 2");
-                        ssthresh = 2;  // ssthresh 不得小于2
+                        ssthresh = 2;
                     } else {
-                        System.out.println("ssthresh: " + ssthresh + " ---> " + cwnd / 2);
-                        ssthresh = cwnd / 2;  // 慢开始门限变为 cwnd
-
+                        ssthresh = cwnd / 2;
                     }
-                    // 关键点：Reno将窗口 cwnd 设置为新的 ssthresh（即减半），而不是置1
-                    // 这意味着它跳过了慢启动，直接进入拥塞避免
-                    System.out.println("cwnd: " + cwnd + " ---> " + ssthresh);
-                    cwnd = ssthresh;  // cwnd 置为ssthresh
+                    cwnd = ssthresh;
                     CongestionAvoidanceCount = 0;
                 } else {
-                    /*TCP Tahoe版本*/
-                    // 乘法减小：ssthresh 依然减半
                     if (cwnd / 2 < 2) {
-                        System.out.println("ssthresh: " + ssthresh + " ---> 2");
-                        ssthresh = 2;  // ssthresh 不得小于2
+                        ssthresh = 2;
                     } else {
-                        System.out.println("ssthresh: " + ssthresh + " ---> " + cwnd / 2);
-                        ssthresh = cwnd / 2;  // 慢开始门限变为 cwnd 的一半
-
+                        ssthresh = cwnd / 2;
                     }
-                    System.out.println("cwnd: " + cwnd + " ---> 1");
-                    cwnd = 1;  // cwnd 置为1
+                    cwnd = 1;
                     CongestionAvoidanceCount = 0;
                 }
                 appendChange(currentSequence);
             }
-        } else {//收到新的ACK（不是重复的）
+        } else { // 收到新的ACK（核心修改在这里！）
+
+            // 【修正 1】在这里定义 ackedCount，因为 currentSequence 此时才有效
+            int ackedCount = currentSequence - lastACKSequence;
+
             // 清空计时器
             timer.cancel();
 
-            // 收到新的ACK， 滑动窗口：清除缓冲区里已经被确认的包
-            for (int i = lastACKSequence + 1; i <= currentSequence; i++) {  // 清除前面的包
+            // 滑动窗口：清除缓冲区里已经被确认的包
+            for (int i = lastACKSequence + 1; i <= currentSequence; i++) {
                 packets.remove(i);
             }
-            // 更新 ACK 记录
-            lastACKSequence = currentSequence;  // 重置lastACKSequence为当前收到ACK的包的seq
-            lastACKSequenceCount = 1;  // 重置lastACKCount为1
 
-            // 如果窗口中仍有分组，则重开计时器
+            // 更新 ACK 记录
+            lastACKSequence = currentSequence;
+            lastACKSequenceCount = 1;
+
+            // 重开计时器
             if (!packets.isEmpty()) {
                 timer = new Timer();
                 timer.schedule(new RetransmitTask(client, this), 1000, 1000);
             }
+
             // 3. 拥塞窗口调整
             if (cwnd < ssthresh) {
-                // 慢启动，条件：当前窗口 < 门限
+                // [慢启动]
                 System.out.println("***** Slow Start *****");
-                System.out.println("cwnd: " + cwnd + " ---> " + (cwnd + 1));
-                // 行为：指数增长。每收到一个ACK，窗口+1。
-                // (原理：发送N个包，回来N个ACK，窗口就变成 N+N = 2N，翻倍)
-                cwnd ++;  // 每收到一个ACK， cwnd加一
+
+                // 【修正 2】加上累计确认的数量，恢复指数增长
+                cwnd += ackedCount;
+
+                System.out.println("cwnd: " + (cwnd - ackedCount) + " ---> " + cwnd);
                 appendChange(currentSequence);
             } else {
-                // 拥塞避免
-                // 行为：线性增长。也就是加法增大
-                // 每经过一个 RTT（往返时间），窗口才 +1。
-                // 代码实现：必须攒够 cwnd 个 ACK，窗口才 +1。
-                CongestionAvoidanceCount ++;
+                // [拥塞避免]
+                CongestionAvoidanceCount += ackedCount;
                 System.out.println("***** Congestion Avoidance *****");
-                System.out.println("cwnd: " + cwnd + " NO. " + CongestionAvoidanceCount);
-                if (CongestionAvoidanceCount == cwnd) {  // 收到ACK数量达到 cwnd 大小时
-                    CongestionAvoidanceCount = 0;  // 重置计数器
+                System.out.println("cwnd: " + cwnd + " Count: " + CongestionAvoidanceCount);
+
+                // 【修正 3】这里必须用 while 和 >=。
+                // 因为 ackedCount 可能很大（比如一下子确认了5个），导致 Count 直接超过 cwnd。
+                // 如果用 if (Count == cwnd)，就会漏掉增长机会！
+                while (CongestionAvoidanceCount >= cwnd) {
+                    CongestionAvoidanceCount -= cwnd;
                     System.out.println("cwnd: " + cwnd + " ---> " + (cwnd + 1));
-                    cwnd ++;  // cwnd 加一
-                    appendChange(currentSequence);
+                    cwnd++;
                 }
+                appendChange(currentSequence);
             }
-
-
         }
-
-
     }
 }

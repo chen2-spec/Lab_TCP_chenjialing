@@ -1,12 +1,13 @@
-/***************************2.1: ACK/NACK*****************/
-/***** Feng Hong; 2015-12-09******************************/
 package com.ouc.tcp.test;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Hashtable;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import com.ouc.tcp.client.TCP_Receiver_ADT;
 import com.ouc.tcp.message.*;
@@ -15,100 +16,119 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Receiver extends TCP_Receiver_ADT {
 
     private TCP_PACKET ackPack;	//回复的ACK报文段
-    private int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
-    private int last_sequence = -1; // 用于记录上一次收到包的序号
+    // private int sequence=1; // 这个变量似乎没用，建议注释掉
+    // private int last_sequence = -1; // 这个变量似乎也没用
+    // 【新增】用于保存发送方的地址
+    private InetAddress senderAddr;
     private int expectedSequence = 0;  // 用于记录期望收到的seq
-
     private Hashtable<Integer, TCP_PACKET> storagePackets = new Hashtable<>(); // 用于缓存失序分组
+
+    // 【新增】延迟确认计时器
+    private Timer ackTimer;
 
     /*构造函数*/
     public TCP_Receiver() {
-        super();	//调用超类构造函数
-        super.initTCP_Receiver(this);	//初始化TCP接收端
+        super();
+        super.initTCP_Receiver(this);
     }
 
     @Override
     //接收到数据报：检查校验和，设置回复的ACK报文段
     public void rdt_recv(TCP_PACKET recvPack) {
-        //检查校验码，生成ACK
-        if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {  // 计算并比对校验和，如果相等：
-            int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;  // 当前包的seq
-            if (expectedSequence == currentSequence) {  // 当前收到的包就是期望的包
+        //检查校验码
+        if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+            // 【新增】保存发送方地址！重要！
+            this.senderAddr = recvPack.getSourceAddr();
+            int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;
 
-                // 将接收到的正确有序的数据插入 data 队列，准备交付
+            // --- 分支1：收到期望的有序包 ---
+            if (expectedSequence == currentSequence) {
+                // 1. 存入数据
                 dataQueue.add(recvPack.getTcpS().getData());
-
                 expectedSequence += 1 ;
 
-                // 处理缓存数据
-
-                for (int i = expectedSequence; ; i ++ ) {
-                    if (storagePackets.containsKey(i)) {
-                        dataQueue.add(storagePackets.get(i).getTcpS().getData());
-                        expectedSequence += 1;
-                        storagePackets.remove(i);
-                    } else {
-                        break;
-                    }
+                // 2. 处理缓存中能接上的包
+                while (storagePackets.containsKey(expectedSequence)) {
+                    dataQueue.add(storagePackets.get(expectedSequence).getTcpS().getData());
+                    storagePackets.remove(expectedSequence); // 别忘了移除
+                    expectedSequence += 1;
                 }
 
-                //交付数据（每20组数据交付一次）
-                if(dataQueue.size() >= 20)
+                // 3. 交付数据
+                if(dataQueue.size() >= 20 || (currentSequence >= 899 && currentSequence <= 999))
                     deliver_data();
-                if(currentSequence >= 899 && currentSequence <= 999) {
-                    deliver_data();
+
+                // 【核心修改】延迟确认逻辑
+                // 如果是正常有序的包，不立即回复，而是启动计时器等待
+                if (ackTimer == null) {
+                    ackTimer = new Timer();
+                    // 500ms 后发送确认
+                    ackTimer.schedule(new AckTask(), 500);
                 }
+                // 如果 ackTimer 已经在跑了，就什么都不做，让它继续跑（累积确认）
 
-            } else {  // 收到失序的包，返回已确认的最大序号分组的确认
-
+            }
+            // --- 分支2：收到乱序包（说明中间丢包了） ---
+            else {
                 // 缓存失序分组
                 if (!storagePackets.containsKey(currentSequence) && currentSequence > expectedSequence) {
                     storagePackets.put(currentSequence, recvPack);
                 }
 
-
+                // 【核心修改】快重传触发逻辑
+                // 遇到乱序包，必须 *立刻* 发送重复 ACK，不能延迟！
+                // 否则发送方无法及时收到3个重复ACK来触发快重传
+                System.out.println("乱序到达，立即发送重复ACK: " + expectedSequence);
+                sendACK();
             }
-        } else {
 
+        } else {
+            // 校验和错误，可以选择忽略，或者立即发一个当前的ACK（通常忽略即可）
+        }
+    }
+
+    // 【新增】将发送ACK的逻辑提取出来
+    public void sendACK() {
+        // 如果有正在运行的延迟计时器，既然我们要立即发ACK了，就把它取消掉
+        if (ackTimer != null) {
+            ackTimer.cancel();
+            ackTimer = null;
         }
 
-        //生成ACK报文段（设置确认号）
-        tcpH.setTh_ack((expectedSequence - 1) * 100 + 1);  // 设置确认号为已确认序号最大的TCP分组的seq
-        ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());  // 新建一个TCP分组（ACK），发往发送方
-        tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));  // 设置ACK的校验位
+        // 生成ACK报文段（设置确认号）
+        tcpH.setTh_ack((expectedSequence - 1) * 100 + 1);
+        ackPack = new TCP_PACKET(tcpH, tcpS, this.senderAddr); // 目的地址设为null或者源地址，ADT会自动处理
+        tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 
-        reply(ackPack);  // 回复ACK报文段
+        // 调用父类方法发送
+        reply(ackPack);
+    }
 
-
-        System.out.println();
-
-
+    // 【新增】计时器任务类
+    class AckTask extends TimerTask {
+        @Override
+        public void run() {
+            System.out.println("延迟确认计时器超时，发送累积ACK: " + expectedSequence);
+            sendACK();
+        }
     }
 
     @Override
     //交付数据（将数据写入文件）；不需要修改
     public void deliver_data() {
-        //检查dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
         BufferedWriter writer;
-
         try {
             writer = new BufferedWriter(new FileWriter(fw, true));
-
-            //循环检查data队列中是否有新交付数据
             while(!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
-
-                //将数据写入文件
                 for(int i = 0; i < data.length; i++) {
                     writer.write(data[i] + "\n");
                 }
-
-                writer.flush();		//清空输出缓存
+                writer.flush();
             }
             writer.close();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
@@ -116,11 +136,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     @Override
     //回复ACK报文段
     public void reply(TCP_PACKET replyPack) {
-        // 设置错误控制标志
         tcpH.setTh_eflag((byte)7);
-
-        //发送数据报
         client.send(replyPack);
     }
-
 }
