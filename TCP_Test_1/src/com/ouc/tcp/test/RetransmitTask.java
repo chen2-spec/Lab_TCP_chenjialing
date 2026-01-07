@@ -19,13 +19,11 @@ public class RetransmitTask extends TimerTask {
 
     @Override
     public void run() {
-
         // 清空拥塞避免计数器
         window.setCongestionAvoidanceCount(0);
-
-
         // 立刻重传分组(窗口左沿）
         if ( window.getPackets().containsKey(window.getLastACKSequence() + 1)) {
+            // 从发送窗口的缓存中取出这个包，重新发送
             client.send(window.getPackets().get(window.getLastACKSequence() + 1));
         }
 
@@ -33,11 +31,14 @@ public class RetransmitTask extends TimerTask {
         System.out.println("***** Timeout Retransmit *****");
         if (window.getCwnd() / 2 < 2) {
             System.out.println("ssthresh: " + window.getSsthresh() + " ---> 2");
+            // 强制将 ssthresh 设为 2（最小下限），防止变成 0 或 1 导致无法增长
             window.setSsthresh(2);  // ssthresh 不得小于2
         } else {// 乘法减小：ssthresh = cwnd / 2
             System.out.println("ssthresh: " + window.getSsthresh() + " ---> " + window.getCwnd() / 2);
             window.setSsthresh(window.getCwnd() / 2);  // 慢开始门限变为 cwnd 的一半
         }
+        // --- 第二步：重置拥塞窗口 (cwnd) ---
+        // 超时认为网络极度拥塞，所以直接把窗口置为 1，重新进入慢启动 (Slow Start)
         System.out.println("cwnd: " + window.getCwnd() + " ---> 1");
         window.setCwnd(1);  // cwnd 置为1,重新开始慢启动
 
