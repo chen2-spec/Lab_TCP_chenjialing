@@ -23,7 +23,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     private int expectedSequence = 0;  // 用于记录期望收到的seq
     private Hashtable<Integer, TCP_PACKET> storagePackets = new Hashtable<>(); // 用于缓存失序分组
 
-    // 【新增】延迟确认计时器
+    // 延迟确认计时器
     private Timer ackTimer;
 
     /*构造函数*/
@@ -37,16 +37,14 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void rdt_recv(TCP_PACKET recvPack) {
         //检查校验码
         if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-            // 【新增】保存发送方地址！重要！
+            // 保存发送方地址
             this.senderAddr = recvPack.getSourceAddr();
             int currentSequence = (recvPack.getTcpH().getTh_seq() - 1) / 100;
-
             // --- 分支1：收到期望的有序包 ---
             if (expectedSequence == currentSequence) {
                 // 1. 存入数据
                 dataQueue.add(recvPack.getTcpS().getData());
                 expectedSequence += 1 ;
-
                 // 2. 处理缓存中能接上的包
                 while (storagePackets.containsKey(expectedSequence)) {
                     dataQueue.add(storagePackets.get(expectedSequence).getTcpS().getData());
@@ -58,26 +56,21 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 if(dataQueue.size() >= 20 || (currentSequence >= 899 && currentSequence <= 999))
                     deliver_data();
 
-                // 【核心修改】延迟确认逻辑
+                // 延迟确认逻辑
                 // 如果是正常有序的包，不立即回复，而是启动计时器等待
                 if (ackTimer == null) {
                     ackTimer = new Timer();
                     // 500ms 后发送确认
                     ackTimer.schedule(new AckTask(), 500);
                 }
-                // 如果 ackTimer 已经在跑了，就什么都不做，让它继续跑（累积确认）
-
             }
-            // --- 分支2：收到乱序包（说明中间丢包了） ---
-            else {
+            // 2：收到乱序包（说明中间丢包了）
+           else {
                 // 缓存失序分组
                 if (!storagePackets.containsKey(currentSequence) && currentSequence > expectedSequence) {
                     storagePackets.put(currentSequence, recvPack);
                 }
-
-                // 【核心修改】快重传触发逻辑
-                // 遇到乱序包，必须 *立刻* 发送重复 ACK，不能延迟！
-                // 否则发送方无法及时收到3个重复ACK来触发快重传
+                //快重传触发逻辑
                 System.out.println("乱序到达，立即发送重复ACK: " + expectedSequence);
                 sendACK();
             }
