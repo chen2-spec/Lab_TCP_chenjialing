@@ -11,7 +11,6 @@ public class SenderSlidingWindow {
     private int base = 0;  // 窗口左值
     private int nextIndex = 0;  // 下一个包的存放位置
     private TCP_PACKET[] packets = new TCP_PACKET[size];  // 存储窗口内的包
-
     private Timer timer;  // 计时器
     private TaskPacketsRetransmit task;  // 重传任务
 
