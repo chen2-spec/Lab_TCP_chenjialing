@@ -55,7 +55,7 @@ public class ReceiverSlidingWindow {
         while (leftMoveIndex <= size - 1 && packets[leftMoveIndex] != null) {
             leftMoveIndex ++;
         }
-
+        // 将这些连续的包交付给 dataQueue (上层应用)
         for (int i = 0; i < leftMoveIndex; i++) {  // 将已接收到的分组加入交付队列
             dataQueue.add(packets[i].getTcpS().getData());
         }
